@@ -46,7 +46,7 @@ void loop()
 
         case CommandType::CMD_GD:
             // Get current motor speed
-            moonlite.sendHex2(0x02); // TODO: Implement speed control
+            moonlite.sendHex2(motionController.getSpeed()); // TODO: Implement speed control
             break;
 
         case CommandType::CMD_GH:
@@ -93,7 +93,7 @@ void loop()
 
         case CommandType::CMD_SD:
             // Set motor speed
-            // Value in cmd.value
+            motionController.setSpeed(cmd.value);
             break;
 
         case CommandType::CMD_SF:

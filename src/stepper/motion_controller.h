@@ -20,6 +20,7 @@ private:
 
     unsigned long last_step_time_ = 0;
     unsigned long step_interval_us_ = 4000; // 250 steps per second
+    uint8_t speed_ = 2;
 
     void updateDirection()
     {
@@ -77,6 +78,43 @@ public:
     StepMode getStepMode() const
     {
         return stepper_driver_.getStepMode();
+    }
+
+    void setSpeed(uint8_t speed)
+    {
+        if (is_moving_)
+            return;
+
+        switch (speed)
+        {
+        case 0x02: // 250 steps/s
+            step_interval_us_ = 4000;
+            speed_ = speed;
+            break;
+        case 0x04: // 125 steps/s
+            step_interval_us_ = 8000;
+            speed_ = speed;
+            break;
+        case 0x08: // 63 steps/s
+            step_interval_us_ = 16000;
+            speed_ = speed;
+            break;
+        case 0x10: // 32 steps/s
+            step_interval_us_ = 32000;
+            speed_ = speed;
+            break;
+        case 0x20: // 16 steps/s
+            step_interval_us_ = 64000;
+            speed_ = speed;
+            break;
+        default:
+            break;
+        }
+    }
+
+    uint8_t getSpeed() const
+    {
+        return speed_;
     }
 
     void update()
