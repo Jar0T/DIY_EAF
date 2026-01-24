@@ -9,15 +9,17 @@ class MotionController
 private:
     DRV8825Driver stepper_driver_;
 
-    int current_position_ = 0;
-    int target_position_ = 0;
+    long current_position_ = 0;
+    long target_position_ = 0;
+    unsigned long distance_ = 0;
 
     bool is_moving_ = false;
+    bool change_position_ = true;
 
     FocuserDirection direction_ = FocuserDirection::OUTWARD;
 
     unsigned long last_step_time_ = 0;
-    unsigned long step_interval_us_ = 8000;
+    unsigned long step_interval_us_ = 4000; // 250 steps per second
 
     void updateDirection()
     {
@@ -28,24 +30,33 @@ private:
 public:
     MotionController();
 
-    void setCurrentPosition(int position)
+    void setCurrentPosition(long position)
     {
+        if (is_moving_)
+            return;
+
         current_position_ = position;
+        target_position_ = position;
+        distance_ = 0;
         updateDirection();
     }
 
-    int getCurrentPosition() const
+    long getCurrentPosition() const
     {
         return current_position_;
     }
 
-    void setTargetPosition(int position)
+    void setTargetPosition(long position)
     {
+        if (is_moving_)
+            return;
+
         target_position_ = position;
+        distance_ = abs(target_position_ - current_position_);
         updateDirection();
     }
 
-    int getTargetPosition() const
+    long getTargetPosition() const
     {
         return target_position_;
     }
@@ -57,6 +68,9 @@ public:
 
     void setStepMode(StepMode mode)
     {
+        if (is_moving_)
+            return;
+
         stepper_driver_.setStepMode(mode);
     }
 
@@ -67,39 +81,35 @@ public:
 
     void update()
     {
-        if (is_moving_ && (micros() - last_step_time_ >= step_interval_us_))
-        {
-            int increment = stepper_driver_.getStepMode() == StepMode::FULL_STEP ? 2 : 1;
+        if (!is_moving_)
+            return;
 
-            if (direction_ == FocuserDirection::OUTWARD)
-            {
-                // Check if next step would overshoot
-                if (current_position_ + increment <= target_position_)
-                {
-                    stepper_driver_.step();
-                    current_position_ += increment;
-                    last_step_time_ = micros();
-                }
-                else
-                {
-                    is_moving_ = false;
-                }
-            }
-            else
-            {
-                // Check if next step would overshoot
-                if (current_position_ - increment >= target_position_)
-                {
-                    stepper_driver_.step();
-                    current_position_ -= increment;
-                    last_step_time_ = micros();
-                }
-                else
-                {
-                    is_moving_ = false;
-                }
-            }
+        if (distance_ == 0)
+        {
+            is_moving_ = false;
+            return;
         }
+
+        auto now = micros();
+        auto delta_time = now - last_step_time_;
+
+        auto actual_interval_us = stepper_driver_.getStepMode() == StepMode::FULL_STEP ? step_interval_us_ : step_interval_us_ >> 1;
+
+        if (delta_time < actual_interval_us)
+            return;
+
+        stepper_driver_.step();
+
+        if (stepper_driver_.getStepMode() == StepMode::HALF_STEP)
+            change_position_ = !change_position_;
+
+        if (change_position_)
+        {
+            current_position_ += (direction_ == FocuserDirection::OUTWARD) ? 1 : -1;
+            distance_--;
+        }
+
+        last_step_time_ = now;
     }
 
     void startMovement()
