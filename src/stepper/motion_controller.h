@@ -19,13 +19,43 @@ private:
     FocuserDirection direction_ = FocuserDirection::OUTWARD;
 
     unsigned long last_step_time_ = 0;
-    unsigned long step_interval_us_ = 4000; // 250 steps per second
-    uint8_t speed_ = 2;
+    unsigned long step_interval_us_ = 0;
+    uint8_t speed_ = 0x04;
+
+    float min_speed_ = 8.0f;      // steps per second
+    float max_speed_ = 125.0f;    // steps per second
+    float current_speed_ = 0.0f;  // steps per second
+    float acceleration_ = 100.0f; // steps per second squared
 
     void updateDirection()
     {
         direction_ = (current_position_ < target_position_) ? FocuserDirection::OUTWARD : FocuserDirection::INWARD;
         stepper_driver_.setDirection(direction_ == FocuserDirection::OUTWARD);
+    }
+
+    void updateSpeed(float delta_time)
+    {
+        // calculate number of steps to deccelerate from current speed to min speed
+        float speed_diff_squared = current_speed_ * current_speed_ - min_speed_ * min_speed_;
+        unsigned long steps_to_stop = (speed_diff_squared > 0) ? (speed_diff_squared / (2 * acceleration_)) : 0;
+        float speed_change = acceleration_ * delta_time;
+
+        if (distance_ <= steps_to_stop)
+        {
+            // decelerate
+            current_speed_ -= speed_change;
+            if (current_speed_ < min_speed_)
+                current_speed_ = min_speed_;
+        }
+        else if (current_speed_ < max_speed_)
+        {
+            // accelerate
+            current_speed_ += speed_change;
+            if (current_speed_ > max_speed_)
+                current_speed_ = max_speed_;
+        }
+
+        step_interval_us_ = static_cast<unsigned long>(1e6f / current_speed_);
     }
 
 public:
@@ -88,23 +118,23 @@ public:
         switch (speed)
         {
         case 0x02: // 250 steps/s
-            step_interval_us_ = 4000;
+            max_speed_ = 250.0f;
             speed_ = speed;
             break;
         case 0x04: // 125 steps/s
-            step_interval_us_ = 8000;
+            max_speed_ = 125.0f;
             speed_ = speed;
             break;
         case 0x08: // 63 steps/s
-            step_interval_us_ = 16000;
+            max_speed_ = 63.0f;
             speed_ = speed;
             break;
         case 0x10: // 32 steps/s
-            step_interval_us_ = 32000;
+            max_speed_ = 32.0f;
             speed_ = speed;
             break;
         case 0x20: // 16 steps/s
-            step_interval_us_ = 64000;
+            max_speed_ = 16.0f;
             speed_ = speed;
             break;
         default:
@@ -125,6 +155,7 @@ public:
         if (distance_ == 0)
         {
             is_moving_ = false;
+            current_speed_ = 0.0f;
             return;
         }
 
@@ -147,6 +178,8 @@ public:
             distance_--;
         }
 
+        updateSpeed(actual_interval_us / 1e6f);
+
         last_step_time_ = now;
     }
 
@@ -155,11 +188,15 @@ public:
         if (current_position_ != target_position_)
         {
             is_moving_ = true;
+            current_speed_ = min_speed_;
+            step_interval_us_ = static_cast<unsigned long>(1e6f / current_speed_);
+            last_step_time_ = micros();
         }
     }
 
     void stopMovement()
     {
         is_moving_ = false;
+        current_speed_ = 0.0f;
     }
 };

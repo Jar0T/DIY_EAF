@@ -65,12 +65,12 @@ void DRV8825Driver::setStepMode(StepMode mode)
     switch (step_mode_)
     {
     case StepMode::FULL_STEP:
-        digitalWrite(m0_pin_, HIGH);
-        digitalWrite(m1_pin_, LOW);
+        digitalWrite(m0_pin_, LOW);
+        digitalWrite(m1_pin_, HIGH);
         digitalWrite(m2_pin_, LOW);
         break;
     case StepMode::HALF_STEP:
-        digitalWrite(m0_pin_, LOW);
+        digitalWrite(m0_pin_, HIGH);
         digitalWrite(m1_pin_, HIGH);
         digitalWrite(m2_pin_, LOW);
         break;
