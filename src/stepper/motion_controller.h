@@ -1,13 +1,13 @@
 #pragma once
 #include <Arduino.h>
-#include "driver/drv8825_driver.h"
+#include "driver/tmc2209_driver.h"
 #include "driver/step_mode.h"
 #include "focuser_direction.h"
 
 class MotionController
 {
 private:
-    DRV8825Driver stepper_driver_;
+    TMC2209Driver stepper_driver_;
 
     long current_position_ = 0;
     long target_position_ = 0;
@@ -20,24 +20,28 @@ private:
 
     unsigned long last_step_time_ = 0;
     unsigned long step_interval_us_ = 0;
-    uint8_t speed_ = 0x04;
+    uint8_t speed_ = 0x02;
 
-    float min_speed_ = 8.0f;      // steps per second
-    float max_speed_ = 125.0f;    // steps per second
-    float current_speed_ = 0.0f;  // steps per second
-    float acceleration_ = 100.0f; // steps per second squared
+    float min_speed_ = 8.0f;     // steps per second
+    float max_speed_ = 250.0f;   // steps per second
+    float current_speed_ = 0.0f; // steps per second
+    float acceleration_ = 80.0f; // steps per second squared
 
     void updateDirection()
     {
         direction_ = (current_position_ < target_position_) ? FocuserDirection::OUTWARD : FocuserDirection::INWARD;
-        stepper_driver_.setDirection(direction_ == FocuserDirection::OUTWARD);
+        stepper_driver_.setDirection(direction_ == FocuserDirection::INWARD);
+    }
+
+    unsigned long getStepsToStop() const
+    {
+        float speed_diff_squared = current_speed_ * current_speed_ - min_speed_ * min_speed_;
+        return (speed_diff_squared > 0) ? (speed_diff_squared / (2 * acceleration_)) : 0;
     }
 
     void updateSpeed(float delta_time)
     {
-        // calculate number of steps to deccelerate from current speed to min speed
-        float speed_diff_squared = current_speed_ * current_speed_ - min_speed_ * min_speed_;
-        unsigned long steps_to_stop = (speed_diff_squared > 0) ? (speed_diff_squared / (2 * acceleration_)) : 0;
+        unsigned long steps_to_stop = getStepsToStop();
         float speed_change = acceleration_ * delta_time;
 
         if (distance_ <= steps_to_stop)
@@ -60,6 +64,8 @@ private:
 
 public:
     MotionController();
+
+    void begin();
 
     void setCurrentPosition(long position)
     {
@@ -105,7 +111,7 @@ public:
         stepper_driver_.setStepMode(mode);
     }
 
-    StepMode getStepMode() const
+    StepMode getStepMode()
     {
         return stepper_driver_.getStepMode();
     }
@@ -180,7 +186,7 @@ public:
 
         updateSpeed(actual_interval_us / 1e6f);
 
-        last_step_time_ = now;
+        last_step_time_ += actual_interval_us;
     }
 
     void startMovement()
@@ -196,7 +202,11 @@ public:
 
     void stopMovement()
     {
-        is_moving_ = false;
-        current_speed_ = 0.0f;
+        // decelerate to stop safely
+        auto steps_to_stop = getStepsToStop();
+        if (distance_ > steps_to_stop)
+        {
+            distance_ = steps_to_stop;
+        }
     }
 };

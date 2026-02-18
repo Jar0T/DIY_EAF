@@ -8,7 +8,7 @@ MotionController motionController;
 
 void setup()
 {
-    // put your setup code here, to run once:
+    motionController.begin();
 }
 
 void loop()
